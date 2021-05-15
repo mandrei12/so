@@ -2,6 +2,7 @@
  * Hackathon SO: LogMemCacher
  * (c) 2020-2021, Operating Systems
  */
+#define _GNU_SOURCE 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+
 
 #include "../../include/server.h"
 
@@ -88,7 +90,7 @@ void logmemcache_init_server_os(int *socket_server)
 		if (!clients)
 			clients = malloc(sizeof(thread_client));
 		else
-			clients = realloc(clients, sizeof(clients) + sizeof(thread_client));
+			clients = realloc(clients, (pos + 1) * sizeof(thread_client));
 		memset(&client, 0, sizeof(struct sockaddr_in));
 		client_size = sizeof(struct sockaddr_in);
 		client_sock = accept(sock, (struct sockaddr *)&client,
@@ -105,6 +107,7 @@ void logmemcache_init_server_os(int *socket_server)
 			perror("Error while creating");
 			exit(1);
 		}
+		pos++;
 
 		// client_function(client_sock);
 	}
@@ -112,19 +115,41 @@ void logmemcache_init_server_os(int *socket_server)
 
 int logmemcache_init_client_cache(struct logmemcache_cache *cache)
 {
-	cache->ptr = mmap(NULL, cache->pages, PROT_READ | PROT_WRITE | PROT_EXEC, 
-		MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-	if (cache->ptr == NULL) {
-		fprintf(stderr, "mmap\n");
-		return -1;
-	}
+	
+	cache->ptr = NULL;
+	cache->pages = 0;
 	return 0;
 }
 
 int logmemcache_add_log_os(struct logmemcache_client_st *client,
 	struct client_logline *log)
 {
+	int pageSize = getpagesize();
 
+	// printf("Adding log line\n");
+	if (!client->cache->ptr) {
+		// printf("ptr is null\n");
+		client->cache->ptr = mmap(NULL, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, 
+			MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+		if (client->cache->ptr == NULL) {
+			fprintf(stderr, "mmap\n");
+			return -1;
+		}
+		client->cache->pages++;
+		// printf("Pages are %d\n", client->cache->pages);
+	} else {
+		client->cache->ptr = mremap(client->cache->ptr, client->cache->pages * pageSize, 
+			(client->cache->pages + 1) * pageSize, MREMAP_MAYMOVE);
+		if (client->cache->ptr == NULL) {
+			fprintf(stderr, "mmap\n");
+			return -1;
+		}
+		client->cache->pages++;
+	}
+	// if (!client->cache->ptr)
+	// printf("Logline %s\n", log->logline);
+	memcpy(client->cache->ptr, log->logline, LOGLINE_SIZE);
+	// printf("Err\n");
 	return 0;
 }
 
