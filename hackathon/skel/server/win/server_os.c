@@ -133,47 +133,57 @@ int logmemcache_add_log_os(struct logmemcache_client_st *client,
 {
 	char *buffer;
 
-	// printf("Adding log line\n");
+	printf("Adding for client sock %d\n", client->client_sock);
+
+	printf("Adding log line\n");
 	if (!client->cache->ptr) {
-		// printf("ptr is null\n");
+		printf("ptr is null\n");
 		client->cache->ptr = VirtualAlloc(NULL,
 			pageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (client->cache->ptr == NULL) {
 			fprintf(stderr, "mmap\n");
-			exit(EXIT_FAILURE);
+			return -1;
 		}
-		// client->cache->ptr = mmap(NULL, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, 
-		// 	MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-		// if (client->cache->ptr == NULL) {
-		// 	fprintf(stderr, "mmap\n");
-		// 	return -1;
-		// }
 		client->cache->pages++;
-		// printf("Pages are %d\n", client->cache->pages);
-	} else {
+		client->cache->logs++;
+		client->cache->logs_per_page++;
+		memcpy(client->cache->ptr, log->logline, LOGLINE_SIZE);
+		printf("Pages are %d\n", client->cache->pages);
+	} else if (client->cache->logs_per_page >= pageSize / LINE_SIZE) {
+		printf("I need another page\n");
+		printf("Log is %d\n", client->cache->logs);
+		printf("Log per page is %d\n", client->cache->logs_per_page);
+		printf("pagesize per page is %d\n", pageSize);
+		printf("Page is %d\n", client->cache->pages);
 		buffer = malloc(sizeof(char) * (client->cache->pages * pageSize));
 		memcpy(buffer, client->cache->ptr, client->cache->pages * pageSize);
 		client->cache->ptr = VirtualAlloc(NULL,
-			(client->cache->pages + 1) * pageSize, MEM_RESERVE | MEM_COMMIT, 
-			PAGE_EXECUTE_READWRITE);
+			(client->cache->pages + 1) * pageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 		if (client->cache->ptr == NULL) {
 			fprintf(stderr, "mmap\n");
 			exit(EXIT_FAILURE);
 		}
-		// client->cache->ptr = mremap(client->cache->ptr, client->cache->pages * pageSize, 
-		// 	(client->cache->pages + 1) * pageSize, MREMAP_MAYMOVE);
-		// if (client->cache->ptr == NULL) {
-		// 	fprintf(stderr, "mmap\n");
-		// 	return -1;
-		// }
 		memcpy(client->cache->ptr, buffer, client->cache->pages * pageSize);
+		memcpy(((char *)client->cache->ptr) + client->cache->pages * pageSize, log->logline, LOGLINE_SIZE);
+		free(buffer);
 		client->cache->pages++;
+		client->cache->logs++;
+		client->cache->logs_per_page = 1;
 		
+	} else {
+		printf("I have enough space in the memcpy pages %d\n", client->cache->pages);
+		
+		memcpy(((char *)client->cache->ptr) + (client->cache->pages - 1) * pageSize 
+			+ client->cache->logs_per_page - 1, log->logline, LOGLINE_SIZE);
+		client->cache->logs_per_page++;
+		client->cache->logs++;
 	}
-	// if (!client->cache->ptr)
-	// printf("Logline %s\n", log->logline);
-	memcpy(client->cache->ptr, log->logline, LOGLINE_SIZE);
-	// printf("Err\n");
+	return 0;
+}
+
+
+int logmemcache_disconnect_client_os(struct logmemcache_client_st *client)
+{
 	return 0;
 }
 
