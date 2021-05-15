@@ -75,13 +75,13 @@ static int logmemcache_add_client(struct logmemcache_client_st *client,
 	caches[cache_count++] = client->cache;
 
 	err = logmemcache_init_client_cache(client->cache);
+	// printf("err is for init cache %d\n", err);
 found:
 	return err;
 }
 
 static int logmemcache_disconnect_client(struct logmemcache_client_st *client)
 {
-
 	return 0;
 }
 
@@ -94,7 +94,7 @@ static int logmemcache_unsubscribe_client(struct logmemcache_client_st *client)
 static int logmemcache_add_log(struct logmemcache_client_st *client,
 	struct client_logline *log)
 {
-
+	logmemcache_add_log_os(client, log);
 	return 0;
 }
 
@@ -157,6 +157,7 @@ int get_command(struct logmemcache_client_st *client)
 	char *reply_msg;
 	struct command cmd;
 	struct client_logline *log;
+	int current_dim = 0;
 
 	err = -1;
 
@@ -167,6 +168,7 @@ int get_command(struct logmemcache_client_st *client)
 	recv_size = recv_data(client->client_sock, buffer, sizeof(buffer), 0);
 	if (recv_size <= 0)
 		return -1;
+	// printf("I received %s\n", buffer);
 
 	parse_command(&cmd, buffer, &recv_size);
 	if (recv_size > LINE_SIZE) {
@@ -196,7 +198,15 @@ int get_command(struct logmemcache_client_st *client)
 		err = logmemcache_send_stats(client);
 		break;
 	case ADD:
-		log = NULL;
+		printf("Data is %s\n", cmd.data);
+		log = malloc(sizeof(struct client_logline));
+		for (current_dim = 0; current_dim < TIME_SIZE - 1; current_dim++)
+			log->time[current_dim] = cmd.data[current_dim];
+		printf("Time is %s\n", log->time);
+		for (current_dim = TIME_SIZE - 1; current_dim < LINE_SIZE 
+			&& cmd.data[current_dim] != '\0'; current_dim++)
+			log->logline[current_dim] = cmd.data[current_dim];
+		printf("Logline is %s\n", log->logline);
 		err = logmemcache_add_log(client, log);
 		break;
 	case FLUSH:
@@ -220,6 +230,7 @@ int get_command(struct logmemcache_client_st *client)
 	reply_msg = cmd.op->op_reply;
 
 end:
+	// printf("get command Err is %d\n", err);
 	if (err == 0)
 		sprintf(response, "%s", reply_msg);
 	else
