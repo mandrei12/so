@@ -14,7 +14,17 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
+typedef struct thread_client {
+	HANDLE client_thread;
+	DWORD client_tid;
+	struct sockaddr_in client;
+	int client_size;
+	SOCKET client_socket;
+} thread_client;
+
 extern char *logfile_path;
+thread_client *clients;
+
 
 DWORD WINAPI client_function(SOCKET client_sock)
 {
@@ -35,6 +45,13 @@ DWORD WINAPI client_function(SOCKET client_sock)
 	return 0;
 }
 
+DWORD WINAPI start_thread(LPVOID lpParameter)
+{
+	thread_client thr = *(thread_client *)lpParameter;
+	client_function(thr.client_socket);
+	return 0;
+}
+
 void logmemcache_init_server_os(SOCKET *server_socket)
 {
 	SOCKET sock, client_sock;
@@ -42,6 +59,7 @@ void logmemcache_init_server_os(SOCKET *server_socket)
 	struct sockaddr_in server, client;
 	WSADATA wsaData;
 	int rc;
+	int pos = 0;
 
 	memset(&server, 0, sizeof(struct sockaddr_in));
 
@@ -74,6 +92,10 @@ void logmemcache_init_server_os(SOCKET *server_socket)
 	*server_socket = sock;
 
 	while (1) {
+		if (!clients)
+			clients = malloc(sizeof(thread_client));
+		else
+			clients = realloc(clients, (pos + 1) * sizeof(thread_client));
 		memset(&client, 0, sizeof(struct sockaddr_in));
 		client_size = sizeof(struct sockaddr_in);
 		client_sock = accept(sock, (SOCKADDR *)&client,
@@ -83,7 +105,16 @@ void logmemcache_init_server_os(SOCKET *server_socket)
 			continue;
 		}
 
-		client_function(client_sock);
+		clients[pos].client_size = client_size;
+		clients[pos].client_socket = client_sock;
+		clients[pos].client = client;
+		clients[pos].client_thread
+			= CreateThread(NULL, 0, start_thread,
+				&clients[pos], 0, &clients[pos].client_tid);
+		if (!clients[pos].client_thread)
+			exit(EXIT_FAILURE);
+		pos++;
+		// client_function(client_sock);
 	}
 
 }
