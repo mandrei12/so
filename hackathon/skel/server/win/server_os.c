@@ -14,6 +14,8 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
+#define pageSize 65536
+
 typedef struct thread_client {
 	HANDLE client_thread;
 	DWORD client_tid;
@@ -121,14 +123,57 @@ void logmemcache_init_server_os(SOCKET *server_socket)
 
 int logmemcache_init_client_cache(struct logmemcache_cache *cache)
 {
-
+	cache->ptr = NULL;
+	cache->pages = 0;
 	return 0;
 }
 
 int logmemcache_add_log_os(struct logmemcache_client_st *client,
 	struct client_logline *log)
 {
+	char *buffer;
 
+	// printf("Adding log line\n");
+	if (!client->cache->ptr) {
+		// printf("ptr is null\n");
+		client->cache->ptr = VirtualAlloc(NULL,
+			pageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+		if (client->cache->ptr == NULL) {
+			fprintf(stderr, "mmap\n");
+			exit(EXIT_FAILURE);
+		}
+		// client->cache->ptr = mmap(NULL, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, 
+		// 	MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+		// if (client->cache->ptr == NULL) {
+		// 	fprintf(stderr, "mmap\n");
+		// 	return -1;
+		// }
+		client->cache->pages++;
+		// printf("Pages are %d\n", client->cache->pages);
+	} else {
+		buffer = malloc(sizeof(char) * (client->cache->pages * pageSize));
+		memcpy(buffer, client->cache->ptr, client->cache->pages * pageSize);
+		client->cache->ptr = VirtualAlloc(NULL,
+			(client->cache->pages + 1) * pageSize, MEM_RESERVE | MEM_COMMIT, 
+			PAGE_EXECUTE_READWRITE);
+		if (client->cache->ptr == NULL) {
+			fprintf(stderr, "mmap\n");
+			exit(EXIT_FAILURE);
+		}
+		// client->cache->ptr = mremap(client->cache->ptr, client->cache->pages * pageSize, 
+		// 	(client->cache->pages + 1) * pageSize, MREMAP_MAYMOVE);
+		// if (client->cache->ptr == NULL) {
+		// 	fprintf(stderr, "mmap\n");
+		// 	return -1;
+		// }
+		memcpy(client->cache->ptr, buffer, client->cache->pages * pageSize);
+		client->cache->pages++;
+		
+	}
+	// if (!client->cache->ptr)
+	// printf("Logline %s\n", log->logline);
+	memcpy(client->cache->ptr, log->logline, LOGLINE_SIZE);
+	// printf("Err\n");
 	return 0;
 }
 
