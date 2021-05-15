@@ -24,6 +24,8 @@ typedef int HANDLE;
 #endif
 
 struct logmemcache_cache {
+	size_t logs;
+	size_t logs_per_page;
 	char *service_name;
 	void *ptr;
 	size_t pages;
@@ -50,6 +52,7 @@ int logmemcache_init_client_cache(struct logmemcache_cache *);
 int logmemcache_unsubscribe_os(struct logmemcache_client_st *);
 int logmemcache_add_log_os(struct logmemcache_client_st *,
 	struct client_logline *);
+int logmemcache_disconnect_client_os(struct logmemcache_client_st *);
 int logmemcache_flush_os(struct logmemcache_client_st *);
 
 #endif
